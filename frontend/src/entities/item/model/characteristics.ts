@@ -1,4 +1,4 @@
-import type { Item, ItemCategory } from '@/entities/item/model/types';
+﻿import type { Item, ItemCategory } from '@/entities/item/model/types';
 
 type CharacteristicOption = {
   label: string;
@@ -14,10 +14,24 @@ export type ItemCharacteristicDefinition = {
   format?: (value: string | number | undefined) => string;
 };
 
+export type ItemCharacteristicViewModel = {
+  isMissing: boolean;
+  key: string;
+  label: string;
+  value: string;
+};
+
 const EMPTY_VALUE_LABEL = 'Не заполнено';
 
+export const isMissingItemParamValue = (value: string | number | undefined) =>
+  value === null || value === undefined || value === '';
+
+export const isMissingItemDraftValue = (value: string | undefined) => !value?.trim();
+
+export const isItemDescriptionMissing = (description?: string) => !description?.trim();
+
 const formatOptionalValue = (value: string | number | undefined) => {
-  if (value === null || value === undefined || value === '') {
+  if (isMissingItemParamValue(value)) {
     return EMPTY_VALUE_LABEL;
   }
 
@@ -35,7 +49,7 @@ const createEnumFormatter = (labels: Record<string, string>) => (value: string |
 const formatNumberWithUnit =
   (unit: string) =>
   (value: string | number | undefined): string => {
-    if (value === null || value === undefined || value === '') {
+    if (isMissingItemParamValue(value)) {
       return EMPTY_VALUE_LABEL;
     }
 
@@ -105,7 +119,10 @@ export const getItemCharacteristicDefinitions = (category: ItemCategory) => item
 
 export const createItemParamsDraft = (item: Item) =>
   Object.fromEntries(
-    getItemCharacteristicDefinitions(item.category).map(field => [field.key, item.params[field.key] ? String(item.params[field.key]) : '']),
+    getItemCharacteristicDefinitions(item.category).map(field => [
+      field.key,
+      isMissingItemParamValue(item.params[field.key]) ? '' : String(item.params[field.key]),
+    ]),
   );
 
 export const normalizeItemParamsForUpdate = (
@@ -128,14 +145,23 @@ export const normalizeItemParamsForUpdate = (
     }),
   );
 
-export const getItemCharacteristics = (item: Item) =>
+export const getItemCharacteristics = (item: Item): ItemCharacteristicViewModel[] =>
   getItemCharacteristicDefinitions(item.category).map(field => ({
+    isMissing: isMissingItemParamValue(item.params[field.key]),
     key: field.key,
     label: field.label,
     value: field.format ? field.format(item.params[field.key]) : formatOptionalValue(item.params[field.key]),
-    isMissing:
-      item.params[field.key] === null || item.params[field.key] === undefined || item.params[field.key] === '',
   }));
 
 export const getFilledItemCharacteristics = (item: Item) =>
   getItemCharacteristics(item).filter(field => !field.isMissing);
+
+export const getMissingItemFieldLabels = (item: Item) =>
+  getItemCharacteristics(item)
+    .filter(field => field.isMissing)
+    .map(field => field.label);
+
+export const getMissingItemCompletionLabels = (item: Item) => [
+  ...(isItemDescriptionMissing(item.description) ? ['Описание'] : []),
+  ...getMissingItemFieldLabels(item),
+];

@@ -34,8 +34,13 @@ export const AdsListPage = () => {
 
   return (
     <Box
+      id="ads-list-top-anchor"
       sx={{
         minHeight: { xs: 'calc(100vh - 24px)', md: 'calc(100vh - 48px)' },
+        scrollMarginTop: {
+          xs: `${listHeaderHeight.xs + 20}px`,
+          md: `${listHeaderHeight.md + 24}px`,
+        },
         pt: {
           xs: `${listHeaderHeight.xs + 12}px`,
           md: `${listHeaderHeight.md + 14}px`,

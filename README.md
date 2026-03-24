@@ -1,1 +1,1 @@
-# YandexAi
+# AvitoAi

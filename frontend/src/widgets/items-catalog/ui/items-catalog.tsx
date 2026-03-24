@@ -1,5 +1,6 @@
 import { Box, Pagination, Stack, useMediaQuery, useTheme } from '@mui/material';
 import { useMemo } from 'react';
+import type { ChangeEvent } from 'react';
 
 import type { ItemListCard } from '@/entities/item/model/types';
 import { ItemCard } from '@/entities/item/ui/item-card';
@@ -39,6 +40,14 @@ export const ItemsCatalog = ({ items, total }: Props) => {
   const renderedGridColumns = itemsCount === 1 && maxColumns > 1 ? 2 : gridColumns;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  const handlePageChange = (_event: ChangeEvent<unknown>, nextPage: number) => {
+    setPage(nextPage);
+    document.getElementById('ads-list-top-anchor')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  };
+
   return (
     <>
       <Box
@@ -57,7 +66,7 @@ export const ItemsCatalog = ({ items, total }: Props) => {
         <Pagination
           color="primary"
           count={totalPages}
-          onChange={(_event, nextPage) => setPage(nextPage)}
+          onChange={handlePageChange}
           page={page}
           shape="rounded"
           showFirstButton

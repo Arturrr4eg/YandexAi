@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { mapListDto } from '@/entities/item/model/mappers';
 import type {
@@ -66,12 +66,22 @@ export const useItemQuery = (id: number | null) =>
   });
 
 export const useUpdateItemMutation = () =>
-  useMutation({
+  {
+    const queryClient = useQueryClient();
+
+    return useMutation({
     mutationFn: async ({ id, input, category }: { id: number; input: UpdateItemInput; category: Item['category'] }) => {
       const { data } = await httpClient.put<{ success: boolean }>(`/items/${id}`, {
         category,
         ...input,
       });
-      return data;
+      return { data, id };
+    },
+    onSuccess: async ({ id }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['item', id] }),
+        queryClient.invalidateQueries({ queryKey: ['items'] }),
+      ]);
     },
   });
+};

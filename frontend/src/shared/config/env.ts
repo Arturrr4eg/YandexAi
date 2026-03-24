@@ -3,7 +3,7 @@ const required = (value: string | undefined, fallback: string): string =>
 
 export const env = {
   apiBaseUrl: required(import.meta.env.VITE_API_BASE_URL, 'http://localhost:8080'),
-  geminiApiKey: import.meta.env.VITE_GEMINI_API_KEY?.trim() ?? '',
-  geminiModel: required(import.meta.env.VITE_GEMINI_MODEL, 'gemini-2.0-flash'),
+  openRouterApiKey: import.meta.env.VITE_OPENROUTER_API_KEY?.trim() ?? '',
+  openRouterModel: required(import.meta.env.VITE_OPENROUTER_MODEL, 'openai/gpt-4o-mini'),
   llmProxyUrl: import.meta.env.VITE_LLM_PROXY_URL?.trim() ?? '',
 };
