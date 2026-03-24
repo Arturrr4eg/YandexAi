@@ -11,7 +11,7 @@ import {
 import { Link, useParams } from 'react-router-dom';
 
 import { useItemQuery } from '@/entities/item/api/item-api';
-import { getItemCharacteristics } from '@/entities/item/model/characteristics';
+import { getFilledItemCharacteristics, getItemCharacteristics } from '@/entities/item/model/characteristics';
 import { formatDate, formatPrice } from '@/shared/lib/format';
 import { MuiImagePlaceholder } from '@/shared/ui/mui-image-placeholder';
 import { PageError, PageLoader } from '@/shared/ui/page-state';
@@ -42,8 +42,9 @@ export const AdDetailsPage = () => {
   if (query.isError || !query.data) return <PageError message="Не удалось загрузить объявление." />;
 
   const item = query.data;
-  const characteristics = getItemCharacteristics(item);
-  const missingFields = getMissingFields(item.description, characteristics);
+  const allCharacteristics = getItemCharacteristics(item);
+  const characteristics = getFilledItemCharacteristics(item);
+  const missingFields = getMissingFields(item.description, allCharacteristics);
 
   return (
     <Stack spacing={2.5}>
@@ -157,27 +158,33 @@ export const AdDetailsPage = () => {
                     gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
                   }}
                 >
-                  {characteristics.map(field => (
-                    <Box
-                      key={field.key}
-                      sx={{
-                        backgroundColor: field.isMissing ? 'action.hover' : 'background.default',
-                        border: theme => `1px solid ${theme.palette.divider}`,
-                        borderRadius: 2.5,
-                        minHeight: 84,
-                        p: 1.5,
-                      }}
-                    >
-                      <Stack spacing={0.9}>
-                        <Typography color="text.secondary" variant="caption">
-                          {field.label}
-                        </Typography>
-                        <Typography fontWeight={600} variant="body1">
-                          {field.value}
-                        </Typography>
-                      </Stack>
-                    </Box>
-                  ))}
+                  {characteristics.length > 0 ? (
+                    characteristics.map(field => (
+                      <Box
+                        key={field.key}
+                        sx={{
+                          backgroundColor: 'background.default',
+                          border: theme => `1px solid ${theme.palette.divider}`,
+                          borderRadius: 2.5,
+                          minHeight: 84,
+                          p: 1.5,
+                        }}
+                      >
+                        <Stack spacing={0.9}>
+                          <Typography color="text.secondary" variant="caption">
+                            {field.label}
+                          </Typography>
+                          <Typography fontWeight={600} variant="body1">
+                            {field.value}
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    ))
+                  ) : (
+                    <Typography color="text.secondary" variant="body2">
+                      Характеристики пока не заполнены.
+                    </Typography>
+                  )}
                 </Box>
               </Stack>
             </Paper>
