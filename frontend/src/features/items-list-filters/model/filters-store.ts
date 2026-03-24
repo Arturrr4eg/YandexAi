@@ -31,7 +31,7 @@ const initialState = {
   sortColumn: 'createdAt' as SortColumn,
   sortDirection: 'desc' as SortDirection,
   page: 1,
-  limit: 20,
+  limit: 10,
   layout: 'grid' as ItemLayout,
 };
 

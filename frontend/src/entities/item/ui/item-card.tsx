@@ -1,6 +1,8 @@
+import { memo } from 'react';
 import { Box, Card, CardActionArea, CardContent, Chip, Stack, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
 
+import { itemCategoryLabels } from '@/entities/item/model/presentation';
 import type { ItemListCard } from '@/entities/item/model/types';
 import { formatPrice } from '@/shared/lib/format';
 import { MuiImagePlaceholder } from '@/shared/ui/mui-image-placeholder';
@@ -10,13 +12,7 @@ type Props = {
   layout: 'grid' | 'list';
 };
 
-const categoryLabel: Record<ItemListCard['category'], string> = {
-  auto: 'Авто',
-  electronics: 'Электроника',
-  real_estate: 'Недвижимость',
-};
-
-export const ItemCard = ({ item, layout }: Props) => (
+export const ItemCard = memo(({ item, layout }: Props) => (
   <Card
     elevation={0}
     sx={{
@@ -53,7 +49,7 @@ export const ItemCard = ({ item, layout }: Props) => (
 
       <CardContent sx={{ display: 'flex', flexGrow: 1, p: 1.25, '&:last-child': { pb: 1.25 } }}>
         <Stack spacing={0.75} sx={{ height: '100%', width: '100%' }}>
-          <Chip label={categoryLabel[item.category]} size="small" sx={{ width: 'fit-content' }} />
+          <Chip label={itemCategoryLabels[item.category]} size="small" sx={{ width: 'fit-content' }} />
 
           <Typography
             lineHeight={1.25}
@@ -116,4 +112,4 @@ export const ItemCard = ({ item, layout }: Props) => (
       </CardContent>
     </CardActionArea>
   </Card>
-);
+));
