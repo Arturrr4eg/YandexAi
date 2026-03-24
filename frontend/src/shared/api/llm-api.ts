@@ -13,6 +13,22 @@ type OpenRouterResponse = {
   };
 };
 
+type ChatMessage = {
+  content: string;
+  role: 'assistant' | 'system' | 'user';
+};
+
+type OpenRouterPlugin = {
+  id: string;
+  max_results?: number;
+};
+
+type CallOpenRouterOptions = {
+  maxTokens?: number;
+  model?: string;
+  plugins?: OpenRouterPlugin[];
+};
+
 export type ParsedAiResponse = {
   displayText: string;
   value: string;
@@ -107,7 +123,7 @@ const mapLlmError = (error: unknown): Error => {
     }
 
     if (error.response?.status === 403) {
-      return new Error('OpenRouter вернула 403 Forbidden. У ключа или аккаунта нет доступа к этой модели или провайдеру.');
+      return new Error('OpenRouter вернула 403 Forbidden. У ключа или аккаунта нет доступа к этой модели, провайдеру или online-плагину.');
     }
 
     const details =
@@ -121,11 +137,23 @@ const mapLlmError = (error: unknown): Error => {
   return error instanceof Error ? error : new Error('Неизвестная ошибка LLM-запроса.');
 };
 
-const callOpenRouter = async (prompt: string, maxTokens = 220): Promise<string> => {
+const callOpenRouterMessages = async (
+  messages: ChatMessage[],
+  options: CallOpenRouterOptions = {},
+): Promise<string> => {
+  const {
+    maxTokens = 220,
+    model = env.openRouterModel,
+    plugins,
+  } = options;
+
   try {
     if (env.llmProxyUrl) {
       const { data } = await axios.post<{ text: string }>(env.llmProxyUrl, {
-        prompt,
+        maxTokens,
+        messages,
+        model,
+        plugins,
       });
 
       return data.text;
@@ -138,19 +166,11 @@ const callOpenRouter = async (prompt: string, maxTokens = 220): Promise<string> 
     const { data } = await axios.post<OpenRouterResponse>(
       'https://openrouter.ai/api/v1/chat/completions',
       {
-        model: env.openRouterModel,
-        messages: [
-          {
-            role: 'system',
-            content: 'Строго следуй инструкциям пользователя и отвечай обычным текстом без markdown, если не просят иное.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.2,
         max_tokens: maxTokens,
+        messages,
+        model,
+        plugins,
+        temperature: 0.2,
       },
       {
         headers: {
@@ -159,7 +179,7 @@ const callOpenRouter = async (prompt: string, maxTokens = 220): Promise<string> 
           'HTTP-Referer': 'http://localhost:5173',
           'X-Title': 'Avito Test App',
         },
-        timeout: 20_000,
+        timeout: 25_000,
       },
     );
 
@@ -169,7 +189,58 @@ const callOpenRouter = async (prompt: string, maxTokens = 220): Promise<string> 
   }
 };
 
+const callOpenRouter = async (
+  prompt: string,
+  options: CallOpenRouterOptions = {},
+): Promise<string> =>
+  callOpenRouterMessages(
+    [
+      {
+        role: 'system',
+        content: 'Строго следуй инструкциям пользователя и отвечай обычным текстом без markdown, если не просят иное.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    options,
+  );
+
+const createOnlinePriceModel = () =>
+  env.openRouterModel.endsWith(':online') ? env.openRouterModel : `${env.openRouterModel}:online`;
+
 export const llmApi = {
+  chatAboutItem: (
+    context: string,
+    history: Array<{ content: string; role: 'assistant' | 'user' }>,
+    question: string,
+  ) =>
+    callOpenRouterMessages(
+      [
+        {
+          role: 'system',
+          content: [
+            'Ты AI-помощник продавца на Avito.',
+            'Отвечай только на основе контекста объявления и истории диалога.',
+            'Не выдумывай факты, характеристики, состояние товара и любые детали, которых нет в контексте.',
+            'Если в контексте не хватает информации, прямо так и скажи.',
+            'Отвечай по-русски, полезно, конкретно и без markdown.',
+            'Контекст объявления:',
+            context,
+          ].join('\n'),
+        },
+        ...history,
+        {
+          role: 'user',
+          content: question,
+        },
+      ],
+      {
+        maxTokens: 360,
+      },
+    ),
+
   generateDescription: (input: string) =>
     callOpenRouter(
       [
@@ -188,21 +259,35 @@ export const llmApi = {
         'Контекст объявления:',
         input,
       ].join('\n'),
-      420,
+      {
+        maxTokens: 420,
+      },
     ).then(parseDescriptionResponse),
+
   estimatePrice: (input: string) =>
     callOpenRouter(
       [
         'Ты помогаешь продавцу оценить рыночную цену объявления для Avito.',
-        'Используй только факты из переданного контекста объявления.',
-        'Ничего не выдумывай и не опирайся на детали, которых нет в контексте.',
-        'Если данных недостаточно для уверенной оценки, скажи об этом кратко и всё равно предложи осторожную цену только на основе имеющихся данных.',
-        'Сначала дай короткое, но чуть более подробное объяснение на русском языке: 3-4 предложения о том, какие факторы из контекста влияют на цену и почему ты предлагаешь именно такую оценку.',
+        'Твоя задача — не угадывать цену, а попытаться найти ориентиры в интернете по похожим предложениям, магазинам, маркетплейсам и доскам объявлений.',
+        'Сначала изучи результаты веб-поиска и используй только те ориентиры, которые действительно выглядят релевантными по категории, модели, характеристикам и состоянию.',
+        'Не выдумывай найденные сайты, цены и ссылки. Если подходящих ориентиров мало или они сомнительные, прямо скажи об этом.',
+        'Обязательно учитывай только факты из контекста объявления. Не добавляй характеристики, которых в объявлении нет.',
+        'Если данных в самом объявлении недостаточно для точной оценки, честно укажи это и предложи осторожную цену с оговоркой.',
+        'Сначала дай краткое, но содержательное объяснение на русском языке в 3-5 предложениях:',
+        '- какие ориентиры удалось найти онлайн;',
+        '- почему они релевантны или почему релевантность ограничена;',
+        '- какие параметры сильнее всего влияют на цену;',
+        '- насколько уверенной или осторожной является оценка.',
+        'Если ты опираешься на найденные ориентиры, упомяни тип площадок или продавцов человеческим языком, но без длинных ссылок и без markdown.',
         'После этого в самом конце отдельной строкой обязательно верни итоговую цену для вставки в поле в формате:',
         'FINAL_PRICE: <целое число в рублях без пробелов>',
         'Контекст объявления:',
         input,
       ].join('\n'),
-      280,
+      {
+        maxTokens: 420,
+        model: createOnlinePriceModel(),
+        plugins: [{ id: 'web', max_results: 5 }],
+      },
     ).then(parsePriceResponse),
 };

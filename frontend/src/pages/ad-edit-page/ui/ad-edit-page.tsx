@@ -8,11 +8,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import type { FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
 import ClearRoundedIcon from '@mui/icons-material/ClearRounded';
+import { useRef, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useItemQuery, useUpdateItemMutation } from '@/entities/item/api/item-api';
+import {
+  getItemCharacteristicDefinitions,
+  isMissingItemDraftValue,
+} from '@/entities/item/model/characteristics';
 import { MAX_ITEM_PRICE } from '@/entities/item/model/edit-form-validation';
 import { itemCategoryLabels } from '@/entities/item/model/presentation';
 import type { Item } from '@/entities/item/model/types';
@@ -20,10 +24,7 @@ import { useItemEditAi } from '@/features/item-edit-form/model/use-item-edit-ai'
 import { useItemEditForm } from '@/features/item-edit-form/model/use-item-edit-form';
 import { ItemEditAiPanel } from '@/features/item-edit-form/ui/item-edit-ai-panel';
 import { ItemEditCategoryFields } from '@/features/item-edit-form/ui/item-edit-category-fields';
-import {
-  getItemCharacteristicDefinitions,
-  isMissingItemDraftValue,
-} from '@/entities/item/model/characteristics';
+import { ItemEditChatPanel } from '@/features/item-edit-form/ui/item-edit-chat-panel';
 import { PageError, PageLoader } from '@/shared/ui/page-state';
 
 type AdEditPageContentProps = {
@@ -33,14 +34,22 @@ type AdEditPageContentProps = {
 
 const getFieldWarningStyles = (isActive: boolean) => (isActive ? { borderColor: '#FFA940' } : {});
 
+const focusableFieldSelector = [
+  'input:not([type="hidden"]):not([disabled])',
+  'textarea:not([disabled])',
+  '[role="combobox"]:not([aria-disabled="true"])',
+].join(', ');
+
 const AdEditPageContent = ({ id, item }: AdEditPageContentProps) => {
   const navigate = useNavigate();
   const updateMutation = useUpdateItemMutation();
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const {
     applyAiDescription,
     applyAiPrice,
     buildSubmitInput,
+    chatAiContext,
     clearDraft,
     clearFieldValue,
     clearParamValue,
@@ -51,11 +60,13 @@ const AdEditPageContent = ({ id, item }: AdEditPageContentProps) => {
     hasDescription,
     isSaveBlocked,
     priceAiContext,
+    redo,
     runFieldValidation,
     runParamValidation,
     setFieldValue,
     setFormError,
     setParamValue,
+    undo,
   } = useItemEditForm({
     id,
     isSubmitting: updateMutation.isPending,
@@ -99,6 +110,69 @@ const AdEditPageContent = ({ id, item }: AdEditPageContentProps) => {
     }
   };
 
+  const handleFormKeyDown = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+
+      if (event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+
+      return;
+    }
+
+    if (
+      event.key !== 'Enter' ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    ) {
+      return;
+    }
+
+    const formElement = formRef.current;
+    const target = event.target as HTMLElement | null;
+
+    if (!formElement || !target) {
+      return;
+    }
+
+    const focusableFields = Array.from(
+      formElement.querySelectorAll<HTMLElement>(focusableFieldSelector),
+    ).filter(element => {
+      if (element.getAttribute('aria-hidden') === 'true') {
+        return false;
+      }
+
+      if ('offsetParent' in element && element.offsetParent === null) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const currentIndex = focusableFields.findIndex(
+      element => element === target || element.contains(target),
+    );
+
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const nextField = focusableFields[currentIndex + 1];
+
+    if (!nextField) {
+      event.preventDefault();
+      return;
+    }
+
+    event.preventDefault();
+    nextField.focus();
+  };
+
   return (
     <Stack component="section" spacing={3.5}>
       <Typography component="h1" fontWeight={800} variant="h4">
@@ -115,7 +189,14 @@ const AdEditPageContent = ({ id, item }: AdEditPageContentProps) => {
           position: 'relative',
         }}
       >
-        <Stack component="form" onSubmit={handleSubmit} spacing={0} sx={{ maxWidth: { xs: '100%', lg: '100%' } }}>
+        <Stack
+          component="form"
+          onKeyDown={handleFormKeyDown}
+          onSubmit={handleSubmit}
+          ref={formRef}
+          spacing={0}
+          sx={{ maxWidth: { xs: '100%', lg: '100%' } }}
+        >
           <Stack
             spacing={2}
             sx={{
@@ -203,23 +284,27 @@ const AdEditPageContent = ({ id, item }: AdEditPageContentProps) => {
           </Stack>
         </Stack>
 
-        <ItemEditAiPanel
-          descriptionAiState={descriptionAiState}
-          hasDescription={hasDescription}
-          onApplyDescription={() => {
-            applyAiDescription(descriptionAiState.appliedValue);
-            closeDescriptionBubble();
-          }}
-          onApplyPrice={() => {
-            applyAiPrice(priceAiState.appliedValue);
-            closePriceBubble();
-          }}
-          onAskDescription={askDescription}
-          onAskPrice={askPrice}
-          onCloseDescription={closeDescriptionBubble}
-          onClosePrice={closePriceBubble}
-          priceAiState={priceAiState}
-        />
+        <Stack spacing={2.5}>
+          <ItemEditAiPanel
+            descriptionAiState={descriptionAiState}
+            hasDescription={hasDescription}
+            onApplyDescription={() => {
+              applyAiDescription(descriptionAiState.appliedValue);
+              closeDescriptionBubble();
+            }}
+            onApplyPrice={() => {
+              applyAiPrice(priceAiState.appliedValue);
+              closePriceBubble();
+            }}
+            onAskDescription={askDescription}
+            onAskPrice={askPrice}
+            onCloseDescription={closeDescriptionBubble}
+            onClosePrice={closePriceBubble}
+            priceAiState={priceAiState}
+          />
+
+          <ItemEditChatPanel context={chatAiContext} />
+        </Stack>
       </Box>
     </Stack>
   );

@@ -62,3 +62,16 @@ export const createPriceAiContext = (item: Item, form: ItemEditFormState) =>
     null,
     2,
   );
+
+export const createChatAiContext = (item: Item, form: ItemEditFormState) =>
+  JSON.stringify(
+    {
+      category: item.category,
+      currentDescription: form.description.trim() || undefined,
+      currentPrice: form.price.trim() || undefined,
+      params: normalizeItemParamsForUpdate(item.category, form.params),
+      title: form.title.trim(),
+    },
+    null,
+    2,
+  );

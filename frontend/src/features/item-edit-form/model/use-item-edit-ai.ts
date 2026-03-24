@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { llmApi } from '@/shared/api/llm-api';
 
@@ -30,7 +30,7 @@ export const useItemEditAi = ({ currentDescription, descriptionContext, priceCon
   const [priceAiState, setPriceAiState] = useState<AiRequestState>(createIdleAiState);
   const [descriptionAiState, setDescriptionAiState] = useState<AiRequestState>(createIdleAiState);
 
-  const askPrice = async () => {
+  const askPrice = useCallback(async () => {
     setPriceAiState({
       appliedValue: '',
       isTooltipOpen: false,
@@ -59,9 +59,9 @@ export const useItemEditAi = ({ currentDescription, descriptionContext, priceCon
         status: 'error',
       });
     }
-  };
+  }, [priceContext]);
 
-  const askDescription = async () => {
+  const askDescription = useCallback(async () => {
     setDescriptionAiState({
       appliedValue: '',
       isTooltipOpen: false,
@@ -90,21 +90,21 @@ export const useItemEditAi = ({ currentDescription, descriptionContext, priceCon
         status: 'error',
       });
     }
-  };
+  }, [currentDescription, descriptionContext]);
 
-  const closePriceBubble = () => {
+  const closePriceBubble = useCallback(() => {
     setPriceAiState(current => ({
       ...current,
       isTooltipOpen: false,
     }));
-  };
+  }, []);
 
-  const closeDescriptionBubble = () => {
+  const closeDescriptionBubble = useCallback(() => {
     setDescriptionAiState(current => ({
       ...current,
       isTooltipOpen: false,
     }));
-  };
+  }, []);
 
   return {
     askDescription,

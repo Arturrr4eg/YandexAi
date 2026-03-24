@@ -58,10 +58,29 @@ export const MuiThemeProvider = ({ children }: PropsWithChildren) => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <GlobalStyles
-        styles={{
+        styles={theme => ({
           '#root': { minHeight: '100vh' },
           a: { color: 'inherit', textDecoration: 'none' },
-        }}
+          '*': {
+            scrollbarColor:
+              theme.palette.mode === 'dark' ? '#485262 #1f242c' : '#c7ced8 #eef1f4',
+          },
+          '*::-webkit-scrollbar': {
+            height: 10,
+            width: 10,
+          },
+          '*::-webkit-scrollbar-thumb': {
+            backgroundColor: theme.palette.mode === 'dark' ? '#485262' : '#c7ced8',
+            border: `2px solid ${theme.palette.mode === 'dark' ? '#1f242c' : '#eef1f4'}`,
+            borderRadius: 999,
+          },
+          '*::-webkit-scrollbar-track': {
+            backgroundColor: theme.palette.mode === 'dark' ? '#1f242c' : '#eef1f4',
+          },
+          'input[type="number"]': {
+            colorScheme: theme.palette.mode === 'dark' ? 'light' : 'light',
+          },
+        })}
       />
       {children}
     </ThemeProvider>

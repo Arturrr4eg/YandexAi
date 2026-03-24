@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   isMissingItemDraftValue,
@@ -11,12 +11,14 @@ import {
 } from '@/entities/item/model/edit-form-validation';
 import type { Item, UpdateItemInput } from '@/entities/item/model/types';
 import {
+  createChatAiContext,
   createDescriptionAiContext,
   createPriceAiContext,
   getItemEditDraftKey,
   mergeItemEditDraft,
   type ItemEditFormState,
 } from '@/features/item-edit-form/model/item-edit-draft';
+import { useDebouncedValue } from '@/shared/lib/use-debounced-value';
 
 type UseItemEditFormParams = {
   id: number;
@@ -28,30 +30,41 @@ const createEmptyErrors = (): ItemEditFieldErrors => ({
   params: {},
 });
 
+const hasFormStateChanged = (current: ItemEditFormState, next: ItemEditFormState) =>
+  current.title !== next.title ||
+  current.price !== next.price ||
+  current.description !== next.description ||
+  current.params !== next.params;
+
 export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParams) => {
   const [form, setForm] = useState<ItemEditFormState>(() =>
     mergeItemEditDraft(item, localStorage.getItem(getItemEditDraftKey(id))),
   );
   const [fieldErrors, setFieldErrors] = useState<ItemEditFieldErrors>(createEmptyErrors);
   const [formError, setFormError] = useState('');
+  const debouncedForm = useDebouncedValue(form, 300);
+  const undoStackRef = useRef<ItemEditFormState[]>([]);
+  const redoStackRef = useRef<ItemEditFormState[]>([]);
 
   useEffect(() => {
-    localStorage.setItem(getItemEditDraftKey(id), JSON.stringify(form));
-  }, [form, id]);
+    localStorage.setItem(getItemEditDraftKey(id), JSON.stringify(debouncedForm));
+  }, [debouncedForm, id]);
 
-  const descriptionAiContext = useMemo(() => createDescriptionAiContext(item, form), [form, item]);
-  const priceAiContext = useMemo(() => createPriceAiContext(item, form), [form, item]);
+  const descriptionAiContext = useMemo(() => createDescriptionAiContext(item, debouncedForm), [debouncedForm, item]);
+  const priceAiContext = useMemo(() => createPriceAiContext(item, debouncedForm), [debouncedForm, item]);
+  const rawChatAiContext = useMemo(() => createChatAiContext(item, debouncedForm), [debouncedForm, item]);
+  const chatAiContext = useDebouncedValue(rawChatAiContext, 700);
   const hasDescription = !isMissingItemDraftValue(form.description);
   const isSaveBlocked = !form.title.trim() || !form.price.trim() || isSubmitting;
 
-  const updateFieldError = (key: keyof Omit<ItemEditFieldErrors, 'params'>, value?: string) => {
+  const updateFieldError = useCallback((key: keyof Omit<ItemEditFieldErrors, 'params'>, value?: string) => {
     setFieldErrors(current => ({
       ...current,
       [key]: value,
     }));
-  };
+  }, []);
 
-  const updateParamError = (key: string, value?: string) => {
+  const updateParamError = useCallback((key: string, value?: string) => {
     setFieldErrors(current => ({
       ...current,
       params: value
@@ -61,37 +74,59 @@ export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParam
           }
         : Object.fromEntries(Object.entries(current.params).filter(([entryKey]) => entryKey !== key)),
     }));
-  };
+  }, []);
 
-  const runFieldValidation = (field: 'title' | 'price' | 'description') => {
+  const pushHistoryEntry = useCallback((snapshot: ItemEditFormState) => {
+    undoStackRef.current.push(snapshot);
+
+    if (undoStackRef.current.length > 100) {
+      undoStackRef.current.shift();
+    }
+
+    redoStackRef.current = [];
+  }, []);
+
+  const setNextFormState = useCallback((updater: (current: ItemEditFormState) => ItemEditFormState) => {
+    setForm(current => {
+      const next = updater(current);
+
+      if (hasFormStateChanged(current, next)) {
+        pushHistoryEntry(current);
+      }
+
+      return next;
+    });
+  }, [pushHistoryEntry]);
+
+  const runFieldValidation = useCallback((field: 'title' | 'price' | 'description') => {
     const nextErrors = validateItemEditForm(item.category, form);
     updateFieldError(field, nextErrors[field]);
-  };
+  }, [form, item.category, updateFieldError]);
 
-  const runParamValidation = (key: string) => {
+  const runParamValidation = useCallback((key: string) => {
     const nextErrors = validateItemEditForm(item.category, form);
     updateParamError(key, nextErrors.params[key]);
-  };
+  }, [form, item.category, updateParamError]);
 
-  const setFieldValue = (key: 'title' | 'price' | 'description', value: string) => {
-    setForm(current => ({
+  const setFieldValue = useCallback((key: 'title' | 'price' | 'description', value: string) => {
+    setNextFormState(current => ({
       ...current,
       [key]: value,
     }));
     updateFieldError(key);
     setFormError('');
-  };
+  }, [setNextFormState, updateFieldError]);
 
-  const clearFieldValue = (key: 'title' | 'price' | 'description') => {
-    setForm(current => ({
+  const clearFieldValue = useCallback((key: 'title' | 'price' | 'description') => {
+    setNextFormState(current => ({
       ...current,
       [key]: '',
     }));
     updateFieldError(key);
-  };
+  }, [setNextFormState, updateFieldError]);
 
-  const setParamValue = (key: string, value: string) => {
-    setForm(current => ({
+  const setParamValue = useCallback((key: string, value: string) => {
+    setNextFormState(current => ({
       ...current,
       params: {
         ...current.params,
@@ -100,10 +135,10 @@ export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParam
     }));
     updateParamError(key);
     setFormError('');
-  };
+  }, [setNextFormState, updateParamError]);
 
-  const clearParamValue = (key: string) => {
-    setForm(current => ({
+  const clearParamValue = useCallback((key: string) => {
+    setNextFormState(current => ({
       ...current,
       params: {
         ...current.params,
@@ -111,25 +146,25 @@ export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParam
       },
     }));
     updateParamError(key);
-  };
+  }, [setNextFormState, updateParamError]);
 
-  const applyAiPrice = (value: string) => {
-    setForm(current => ({
+  const applyAiPrice = useCallback((value: string) => {
+    setNextFormState(current => ({
       ...current,
       price: value,
     }));
     updateFieldError('price');
-  };
+  }, [setNextFormState, updateFieldError]);
 
-  const applyAiDescription = (value: string) => {
-    setForm(current => ({
+  const applyAiDescription = useCallback((value: string) => {
+    setNextFormState(current => ({
       ...current,
       description: value,
     }));
     updateFieldError('description');
-  };
+  }, [setNextFormState, updateFieldError]);
 
-  const buildSubmitInput = (): UpdateItemInput | null => {
+  const buildSubmitInput = useCallback((): UpdateItemInput | null => {
     const nextErrors = validateItemEditForm(item.category, form);
     setFieldErrors(nextErrors);
 
@@ -146,16 +181,43 @@ export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParam
       price: Number(form.price),
       title: form.title.trim(),
     };
-  };
+  }, [form, item.category]);
 
-  const clearDraft = () => {
+  const clearDraft = useCallback(() => {
     localStorage.removeItem(getItemEditDraftKey(id));
-  };
+  }, [id]);
+
+  const undo = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+
+    if (!previous) {
+      return;
+    }
+
+    redoStackRef.current.push(form);
+    setForm(previous);
+    setFieldErrors(createEmptyErrors());
+    setFormError('');
+  }, [form]);
+
+  const redo = useCallback(() => {
+    const next = redoStackRef.current.pop();
+
+    if (!next) {
+      return;
+    }
+
+    undoStackRef.current.push(form);
+    setForm(next);
+    setFieldErrors(createEmptyErrors());
+    setFormError('');
+  }, [form]);
 
   return {
     applyAiDescription,
     applyAiPrice,
     buildSubmitInput,
+    chatAiContext,
     clearDraft,
     clearFieldValue,
     clearParamValue,
@@ -166,10 +228,12 @@ export const useItemEditForm = ({ id, isSubmitting, item }: UseItemEditFormParam
     hasDescription,
     isSaveBlocked,
     priceAiContext,
+    redo,
     runFieldValidation,
     runParamValidation,
     setFieldValue,
     setFormError,
     setParamValue,
+    undo,
   };
 };

@@ -8,7 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 
 import type { AiRequestState, AiRequestStatus } from '@/features/item-edit-form/model/use-item-edit-ai';
 import { ItemEditDescriptionDiff } from '@/features/item-edit-form/ui/item-edit-description-diff';
@@ -62,39 +62,46 @@ const aiButtonStyles = {
 const speechBubbleStyles = {
   backgroundColor: 'background.paper',
   border: (theme: Theme) => `1px solid ${theme.palette.divider}`,
-  borderRadius: 3,
+  borderRadius: 2,
   boxShadow: (theme: Theme) => theme.shadows[4],
   left: 0,
-  maxHeight: 280,
   maxWidth: '100%',
   minWidth: 0,
-  overflowY: 'auto',
   p: 2,
   position: 'absolute',
   top: 'calc(100% + 10px)',
   width: '100%',
   zIndex: 2,
-  '&::after': {
-    backgroundColor: 'background.paper',
-    borderRight: (theme: Theme) => `1px solid ${theme.palette.divider}`,
-    borderTop: (theme: Theme) => `1px solid ${theme.palette.divider}`,
-    content: '""',
-    height: 12,
-    left: 24,
-    position: 'absolute',
-    top: -7,
-    transform: 'rotate(45deg)',
-    width: 12,
+} as const;
+
+const bubbleScrollAreaStyles = {
+  maxHeight: 190,
+  overflowY: 'auto',
+  pr: 1.25,
+  scrollbarGutter: 'stable',
+  scrollbarWidth: 'thin',
+  '&::-webkit-scrollbar': {
+    width: 8,
+  },
+  '&::-webkit-scrollbar-thumb': {
+    backgroundColor: (theme: Theme) => (theme.palette.mode === 'dark' ? '#596473' : '#c5ccd6'),
+    border: '2px solid transparent',
+    borderRadius: 999,
+    backgroundClip: 'padding-box',
+  },
+  '&::-webkit-scrollbar-track': {
+    backgroundColor: 'transparent',
+    marginBlock: 10,
   },
 } as const;
 
 const getPriceButtonLabel = (status: AiRequestStatus) => {
   if (status === 'loading') {
-    return 'Выполняется запрос';
+    return 'Запрос цены';
   }
 
   if (status === 'success' || status === 'error') {
-    return 'Повторить запрос';
+    return 'Повторить цену';
   }
 
   return 'Узнать рыночную цену';
@@ -102,11 +109,11 @@ const getPriceButtonLabel = (status: AiRequestStatus) => {
 
 const getDescriptionButtonLabel = (status: AiRequestStatus, hasDescription: boolean) => {
   if (status === 'loading') {
-    return 'Выполняется запрос';
+    return 'Запрос описания';
   }
 
   if (status === 'success' || status === 'error') {
-    return 'Повторить запрос';
+    return 'Повторить описание';
   }
 
   return hasDescription ? 'Улучшить описание' : 'Придумать описание';
@@ -139,12 +146,6 @@ const AiBubble = ({
       backgroundColor: error ? '#FFF1F0' : 'background.paper',
       border: (theme: Theme) => (error ? '1px solid #FFCCC7' : `1px solid ${theme.palette.divider}`),
       color: error ? '#CF1322' : 'inherit',
-      '&::after': {
-        ...speechBubbleStyles['&::after'],
-        backgroundColor: error ? '#FFF1F0' : 'background.paper',
-        borderRight: error ? '1px solid #FFCCC7' : speechBubbleStyles['&::after'].borderRight,
-        borderTop: error ? '1px solid #FFCCC7' : speechBubbleStyles['&::after'].borderTop,
-      },
     }}
   >
     <Stack spacing={1.5}>
@@ -152,11 +153,15 @@ const AiBubble = ({
         {title}
       </Typography>
 
-      <Typography color={error ? '#CF1322' : 'text.secondary'} sx={{ whiteSpace: 'pre-wrap' }} variant="body2">
-        {actionText}
-      </Typography>
+      <Box sx={bubbleScrollAreaStyles}>
+        <Stack spacing={1.5}>
+          <Typography color={error ? '#CF1322' : 'text.secondary'} sx={{ whiteSpace: 'pre-wrap' }} variant="body2">
+            {actionText}
+          </Typography>
 
-      {children}
+          {children}
+        </Stack>
+      </Box>
 
       <Stack direction="row" spacing={1}>
         {actionLabel && onAction ? (
@@ -172,7 +177,7 @@ const AiBubble = ({
   </Box>
 );
 
-export const ItemEditAiPanel = ({
+export const ItemEditAiPanel = memo(({
   descriptionAiState,
   hasDescription,
   onApplyDescription,
@@ -183,7 +188,15 @@ export const ItemEditAiPanel = ({
   onClosePrice,
   priceAiState,
 }: ItemEditAiPanelProps) => (
-  <Stack spacing={1.5} sx={{ minWidth: 0, mt: { xs: 3, lg: 0 }, width: '100%' }}>
+  <Stack
+    spacing={1.5}
+    sx={{
+      borderTop: { xs: theme => `1px solid ${theme.palette.divider}`, lg: 'none' },
+      minWidth: 0,
+      pt: { xs: 3, lg: 0 },
+      width: '100%',
+    }}
+  >
     <Stack direction="row" spacing={1.2} sx={{ alignItems: 'flex-start', width: '100%' }}>
       <Box sx={{ display: 'flex', flex: 1, justifyContent: 'flex-start', minWidth: 0, position: 'relative' }}>
         {priceAiState.isTooltipOpen ? (
@@ -249,4 +262,6 @@ export const ItemEditAiPanel = ({
       </Box>
     </Stack>
   </Stack>
-);
+));
+
+ItemEditAiPanel.displayName = 'ItemEditAiPanel';
